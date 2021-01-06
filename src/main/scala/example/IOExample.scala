@@ -23,7 +23,7 @@ object IOPain {
       buffer1.rewind()
       buffer1.limit(result1)
       val outputFileChannel = AsynchronousFileChannel.open(
-        Paths.get(".gitignore-copy"),
+        Paths.get(".gitignorecopy"),
         StandardOpenOption.CREATE,
         StandardOpenOption.WRITE
         )
@@ -36,7 +36,7 @@ object IOPain {
           println(s"Wrote $result2 bytes")
           outputFileChannel.close()
           val inputChannel = AsynchronousFileChannel.open(
-            Paths.get(".gitignore-copy"),
+            Paths.get(".gitignorecopy"),
             StandardOpenOption.READ
           )
           val buffer2 = ByteBuffer.allocate(256)
@@ -65,12 +65,13 @@ object IOContinuationMonad {
   import cats._
   import cats.data._
   import cats.implicits._
+  import cats.effect.IO
 
-  type NioMonad[A] = ContT[Id, Unit, A]
+  type NioMonad[A] = ContT[IO, Unit, A]
 
-  def nioRead(channel: AsynchronousFileChannel): NioMonad[(ByteBuffer, Integer)] = ContT[Id, Unit, (ByteBuffer, Integer)] {
-    callback =>
-      val buffer = ByteBuffer.allocate(256)
+  def nioRead(channel: AsynchronousFileChannel): NioMonad[(ByteBuffer, Integer)] = ContT[IO, Unit, (ByteBuffer, Integer)] { callback =>
+    val buffer = ByteBuffer.allocate(256)
+    IO.delay(
       channel.read(buffer, 0, null, new CompletionHandler[Integer, Object] {
         override def failed(exc: Throwable, attachment: Object): Unit =
           println(s"Failed to read file: $exc")
@@ -79,8 +80,51 @@ object IOContinuationMonad {
           buffer.rewind()
           buffer.limit(result)
           channel.close()
-          callback((buffer, result))
+          callback(buffer -> result)
         }
       })
+    )
   }
+
+  def nioWrite(buffer: ByteBuffer, channel: AsynchronousFileChannel): NioMonad[Integer] = ContT[IO, Unit, Integer] { callback =>
+    IO.delay(
+      channel.write(buffer, 0, null, new CompletionHandler[Integer, Object] {
+        override def failed(exc: Throwable, attachment: Object): Unit =
+          println(s"Failed to write file: $exc")
+        override def completed(result: Integer, attachment: Object): Unit = {
+          println(s"Cont: Wrote $result bytes")
+          channel.close()
+          callback(result)
+        }
+      })
+    )
+  }
+
+  val channel1 = AsynchronousFileChannel.open(
+    Paths.get(".gitignore"),
+    StandardOpenOption.READ
+  )
+
+  val statusMonad: NioMonad[Boolean] = for {
+    (buffer1a, result1a) <- nioRead(channel1)
+    channel2 = AsynchronousFileChannel.open(
+      Paths.get(".gitignorecopy"),
+      StandardOpenOption.CREATE,
+      StandardOpenOption.WRITE
+      )
+    _ <- nioWrite(buffer1a, channel2)
+    channel3 = AsynchronousFileChannel.open(
+      Paths.get(".gitignorecopy"),
+      StandardOpenOption.READ
+      )
+    (buffer2a, result3a) <- nioRead(channel3)
+  } yield {
+    val isIdentical = result1a == result3a &&
+      new String(buffer2a.array()) == new String(buffer1a.array())
+    isIdentical
+  }
+
+  val value = statusMonad.run { status =>
+    IO.delay(println(s"After running the monad: Status is $status")) }
+
 }

@@ -8,8 +8,11 @@ ThisBuild / organizationName := "example"
 lazy val root = (project in file("."))
   .settings(
     name := "Continuation",
-    libraryDependencies += "org.typelevel" %% "cats-core" % "2.1.1"
-    /* libraryDependencies += scalaTest % Test */
+    libraryDependencies ++= Seq(
+      scalaTest % Test,
+      "org.typelevel" %% "cats-effect" % "2.3.1"
+    ),
+    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
   )
 
 // See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html for instructions on how to publish to Sonatype.
