@@ -15,6 +15,7 @@ object Main extends IOApp {
     println(ContinuationFutures.res) // 43
     println(ComposableFunctions.value) // 43
     println(ComposableFunctions.value2) // 43
+    println(ComputeCost.value) // (43, 60.0)
     IOContinuationMonad.value.as(ExitCode.Success)
   }
 

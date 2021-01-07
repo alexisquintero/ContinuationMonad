@@ -111,20 +111,47 @@ object IOContinuationMonad {
       Paths.get(".gitignorecopy"),
       StandardOpenOption.CREATE,
       StandardOpenOption.WRITE
-      )
+    )
     _ <- nioWrite(buffer1a, channel2)
     channel3 = AsynchronousFileChannel.open(
       Paths.get(".gitignorecopy"),
       StandardOpenOption.READ
-      )
+    )
     (buffer2a, result3a) <- nioRead(channel3)
-  } yield {
-    val isIdentical = result1a == result3a &&
+    } yield {
+      val isIdentical = result1a == result3a &&
       new String(buffer2a.array()) == new String(buffer1a.array())
-    isIdentical
-  }
+      isIdentical
+    }
 
   val value = statusMonad.run { status =>
     IO.delay(println(s"After running the monad: Status is $status")) }
 
+}
+
+object ComputeCost {
+  final case class Cost[A](run: (A => Double) => Double) {
+    def map[B](f: A => B): Cost[B] = Cost { cb => run(cb compose f) }
+    def flatMap[B](f: A => Cost[B]): Cost[B] = Cost { cb => run(a => f(a).run(cb)) }
+    def addCost(c: Double): Cost[A] = Cost { ca => run(ca) + c }
+  }
+
+  def pure[A](a: A): Cost[A] = Cost(cb => cb(a))
+
+  def add3(x: Int): Cost[Int] = Cost[Int] { ca => ca(x + 3) }
+  def mul4(x: Int): Cost[Int] = Cost[Int] { ca => ca(x * 4) }
+
+  val result = for {
+    x <- pure(10).addCost(10)
+    y <- mul4(x).addCost(50)
+    z <- add3(y)
+  } yield z
+
+  def interpret[A](cost: Cost[A]): (A, Double) = {
+    var result: A = null.asInstanceOf[A]
+    val finalCost = cost.run { x => result = x; 0}
+    (result, finalCost)
+  }
+
+  val value = interpret(result)
 }
